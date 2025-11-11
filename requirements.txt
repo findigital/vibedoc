@@ -31,3 +31,15 @@ html2text>=2024.4.24        # HTML转换
 # Agent容器化支持 (可选)
 # weasyprint>=57.0  # 需要额外系统依赖
 # zipfile36>=0.1.3  # Python 3.6+ 内置支持
+
+# 🔐 SaaS功能 - 用户认证和数据库
+sqlalchemy>=2.0.0           # ORM数据库
+bcrypt>=4.0.0               # 密码加密
+pyjwt>=2.8.0                # JWT令牌
+cryptography>=41.0.0        # 加密工具
+
+# 💳 支付集成
+stripe>=7.0.0               # Stripe支付
+
+# 📊 数据分析
+python-dateutil>=2.8.0      # 日期处理

@@ -1,47 +1,52 @@
-# VibeDoc Agent应用 - Docker配置
-# 为魔塔MCP&Agent挑战赛2025优化
+# VibeDoc SaaS Application - Docker Configuration
+# Full-featured SaaS with authentication, subscriptions, and API
 FROM python:3.11-slim
 
-# Agent应用标签
-LABEL name="VibeDoc Agent Application"
-LABEL description="智能Agent开发计划生成器 - MCP多服务协作"
-LABEL version="1.0.0"
-LABEL competition="魔塔MCP&Agent挑战赛2025"
+# Application labels
+LABEL name="VibeDoc SaaS Application"
+LABEL description="AI-powered Product Manager & Architect - SaaS Edition"
+LABEL version="3.0.0"
+LABEL maintainer="VibeDoc Team"
 
-# 设置工作目录
+# Set working directory
 WORKDIR /app
 
-# Agent应用环境变量
+# Environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
-ENV AGENT_APP_MODE=production
-ENV MCP_SERVICES_ENABLED=true
+ENV ENVIRONMENT=production
 
-# 安装系统依赖
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
+    gcc \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# 复制requirements文件
+# Copy requirements file
 COPY requirements.txt .
 
-# 安装Python依赖
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 复制应用代码
+# Copy application code
 COPY . .
 
-# 创建非root用户
+# Create logs directory
+RUN mkdir -p /app/logs
+
+# Create non-root user
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
-# 暴露端口
-EXPOSE 3000
+# Expose ports (Web: 7860, API: 8000)
+EXPOSE 7860 8000
 
-# 健康检查
+# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:3000/ || exit 1
+    CMD curl -f http://localhost:7860/ || exit 1
 
-# 启动命令
-CMD ["python", "app.py"]
+# Default command - runs the SaaS web app
+# For API server, override with: CMD ["python", "api.py"]
+CMD ["python", "saas_app.py"]

@@ -1,30 +1,79 @@
 version: '3.8'
 
 services:
-  vibedoc:
-    build: .
-    container_name: vibedoc-app
-    ports:
-      - "3000:3000"
+  # PostgreSQL Database (SaaS)
+  db:
+    image: postgres:15-alpine
+    container_name: vibedoc-db
     environment:
-      - NODE_ENV=production
-      - PORT=3000
-      - SILICON_FLOW_API_KEY=${SILICON_FLOW_API_KEY}
-      - DEEPWIKI_SSE_URL=${DEEPWIKI_SSE_URL}
-      - FETCH_SSE_URL=${FETCH_SSE_URL}
-    env_file:
-      - .env
-    restart: unless-stopped
+      POSTGRES_DB: vibedoc
+      POSTGRES_USER: vibedoc
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-vibedoc_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      test: ["CMD-SHELL", "pg_isready -U vibedoc"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vibedoc-network
+    restart: unless-stopped
+
+  # VibeDoc SaaS Web Application
+  web:
+    build: .
+    container_name: vibedoc-web
+    command: python saas_app.py
+    environment:
+      - DATABASE_URL=postgresql://vibedoc:${DB_PASSWORD:-vibedoc_password}@db:5432/vibedoc
+      - SILICONFLOW_API_KEY=${SILICONFLOW_API_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - PORT=7860
+      - ENVIRONMENT=production
+    ports:
+      - "7860:7860"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
     networks:
       - vibedoc-network
 
-  # 可选：Redis缓存服务
+  # VibeDoc API Server
+  api:
+    build: .
+    container_name: vibedoc-api
+    command: python api.py
+    environment:
+      - DATABASE_URL=postgresql://vibedoc:${DB_PASSWORD:-vibedoc_password}@db:5432/vibedoc
+      - SILICONFLOW_API_KEY=${SILICONFLOW_API_KEY}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - ENVIRONMENT=production
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - vibedoc-network
+
+  # Redis Cache
   redis:
     image: redis:7-alpine
     container_name: vibedoc-redis
@@ -32,11 +81,16 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - redis-data:/data
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - vibedoc-network
 
-  # 可选：Nginx反向代理
+  # Nginx Reverse Proxy (Optional)
   nginx:
     image: nginx:alpine
     container_name: vibedoc-nginx
@@ -47,13 +101,15 @@ services:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./ssl:/etc/nginx/ssl:ro
     depends_on:
-      - vibedoc
+      - web
+      - api
     restart: unless-stopped
     networks:
       - vibedoc-network
 
 volumes:
-  redis-data:
+  postgres_data:
+  redis_data:
 
 networks:
   vibedoc-network:
